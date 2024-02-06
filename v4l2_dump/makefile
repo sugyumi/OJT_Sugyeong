@@ -1,8 +1,8 @@
 #!/bin/bash
 CC = g++
 CFLAGS = -W -Wall
-SRCS = sutry2.cpp
-TARGET = test
+SRCS = v4l2dupm.cpp
+TARGET = v4l2dump
 $(TARGET):$(SRCS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRCS)
 

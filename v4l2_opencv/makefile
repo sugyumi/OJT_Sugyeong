@@ -1,8 +1,8 @@
 #!/bin/bash
 CC = g++
 CFLAGS = -W -Wall
-SRCS = sutry.cpp
-TARGET = simple
+SRCS = v4l2opencv.cpp
+TARGET = v4l2opencv
 OPENCV := $(shell pkg-config opencv4 --libs --cflags)
 LIBS = $(OPENCV)
 $(TARGET):$(SRCS)
