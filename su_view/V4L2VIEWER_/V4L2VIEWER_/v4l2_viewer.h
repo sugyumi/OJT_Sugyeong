@@ -24,6 +24,12 @@
 //#include <opencv2/highgui/highgui.hpp>
 //#include <opencv2/imgproc/imgproc.hpp>
 
+#define CLEAR(x) memset(&(x), 0, sizeof(x))
+#define DEVNAME "/dev/video0"
+#define CAMERA_WIDTH    1920
+#define CAMERA_HEIGHT   1080
+#define NBUF            4
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class V4L2_viewer; }
 QT_END_NAMESPACE
@@ -51,8 +57,10 @@ private slots:
 
 private:
     Ui::V4L2_viewer *ui_viewer;
-    unsigned char* beforeLOOP();
-    unsigned char* buffers;
+    //unsigned char* beforeLOOP();
+    int beforeLOOP();
+    //unsigned char* buffers;
+    unsigned char* buffers_[NBUF];
     int stop_flag = false;
 
 };

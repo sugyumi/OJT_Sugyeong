@@ -1,11 +1,7 @@
 #include "v4l2_viewer.h"
 #include "ui_v4l2_viewer.h"
 
-#define CLEAR(x) memset(&(x), 0, sizeof(x))
-#define DEVNAME "/dev/video0"
-#define CAMERA_WIDTH    1920
-#define CAMERA_HEIGHT   1080
-#define NBUF            1
+
 //#define OPT
 
 V4L2_viewer::V4L2_viewer(QWidget *parent)
@@ -25,8 +21,7 @@ V4L2_viewer::~V4L2_viewer()
 
 void V4L2_viewer::on_OPEN_clicked()
 {
-    buffers = beforeLOOP();
-    if (buffers != 0)
+    if (beforeLOOP() > 0)
     {
         ui_viewer->START_STOP->setEnabled(true);
         ui_viewer->CLOSE->setEnabled(true);
@@ -43,7 +38,7 @@ void V4L2_viewer::on_START_STOP_clicked()
         /* start */
         stop_flag = true;
         ui_viewer->START_STOP->setText("STOP");
-        timer->start(33);
+        timer->start(33); // 30fps
     }
     else
     {
@@ -66,13 +61,13 @@ void V4L2_viewer::on_CLOSE_clicked()
     ui_viewer->OPEN->setEnabled(true);
 }
 
-unsigned char* V4L2_viewer::beforeLOOP()
+int V4L2_viewer::beforeLOOP()
 {
     fd = open(DEVNAME, O_RDWR);
     if (fd < 0) {
         qDebug() << "***** Cannot Open Devic *****";
         QMessageBox::warning(this, "Warning", "Can not OPEN DEVICE");
-        return 0;
+        return -1;
     }
     else {
         /* CAP */
@@ -80,7 +75,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
         if (ioctl(fd, VIDIOC_QUERYCAP, &cap) == -1) {
             qDebug() << "***** Query capabilites *****";
             QMessageBox::warning(this, "Warning", "Can not QUERYCAP");
-            return 0;
+            return -1;
             //exit(EXIT_FAILURE);
         }
     }
@@ -108,7 +103,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
     {
         qDebug() << "***** Cannot Set Format *****";
         QMessageBox::warning(this, "Warning", "Can not SET FORMAT");
-        return 0;
+        return -1;
     }
     printf("Success to set format\n");
 
@@ -125,7 +120,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
     {
         qDebug() << "***** Cannot REQ BUF *****";
         QMessageBox::warning(this, "Warning", "Can not REQ BUF");
-        return 0;
+        return -1;
     }
     printf("Success to request buffers\n");
     qDebug() << "req.count : " << req.count;
@@ -133,7 +128,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
 
 
     /* Create buffer set */
-    unsigned char* buffers[req.count];
+    //unsigned char* buffers[req.count];
     //qDebug() << req.count;
 
 
@@ -153,18 +148,18 @@ unsigned char* V4L2_viewer::beforeLOOP()
         {
             qDebug() << "***** Cannot QUERY Buffers *****";
             QMessageBox::warning(this, "Warning", "Can not QUERY BUF");
-            return 0;
+            return -1;
         }
 
 
         /* mmap */
-        buffers[buffers_idx] = (u_int8_t*)mmap(nullptr, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, buf.m.offset);
+        buffers_[buffers_idx] = (u_int8_t*)mmap(nullptr, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, buf.m.offset);
 
         printf("mmap offset %d\n", buf.m.offset);
 
-        if (MAP_FAILED == buffers[buffers_idx])
+        if (MAP_FAILED == buffers_[buffers_idx])
         {
-            std::cout << buffers[buffers_idx] << "\n";
+            std::cout << buffers_[buffers_idx] << "\n";
         }
         printf("Success to mmap buffer %d\n", buffers_idx);
 
@@ -173,7 +168,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
         {
             qDebug() << "***** Cannot QUE Buffers *****";
             QMessageBox::warning(this, "Warning", "Can not QUE BUF_1");
-            return 0;
+            return -1;
         }
     }
 
@@ -204,7 +199,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
     {
         qDebug() << "***** Cannot Stream on *****";
         QMessageBox::warning(this, "Warning", "Can not STREAM ON");
-        return 0;
+        return -1;
     }
     printf("Stream on: %s\n", DEVNAME);
 
@@ -218,10 +213,11 @@ unsigned char* V4L2_viewer::beforeLOOP()
     if(select(fd+1, &fds, NULL, NULL, &tv) == -1){
         qDebug() << "***** Waiting for Frame *****";
         QMessageBox::warning(this, "Warning", "Wating for Frame");
-        return 0;
+        return -1;
     }
 
-    return *buffers;
+    //return *buffers_;
+    return 1;
 }
 
 void V4L2_viewer::loop()
@@ -244,26 +240,20 @@ void V4L2_viewer::loop()
 
     /* use opencv */
 #if 0
-    cv::Mat frame = cv::Mat(cv::Size(800, 600), CV_8UC2, &buffers[buf.index]);
-    cv::Mat bgr_frame = cv::Mat(cv::Size(800, 600), CV_8UC3);
-    cv::Mat rgb_frame = cv::Mat(cv::Size(800, 600), CV_8UC3);
+    cv::Mat frame = cv::Mat(cv::Size(1920, 1080), CV_8UC2, &buffers[buf.index]);
+    cv::Mat bgr_frame = cv::Mat(cv::Size(1920, 1080), CV_8UC3);
+    cv::Mat rgb_frame = cv::Mat(cv::Size(1920, 1080), CV_8UC3);
     cv::cvtColor(frame, bgr_frame, cv::COLOR_YUV2RGB_UYVY);
     cv::cvtColor(bgr_frame, rgb_frame, cv::COLOR_BGR2RGB);
 #else
-    cv::Mat frame = cv::Mat(cv::Size(1920, 1080), CV_8UC2, &buffers[buf.index]);
-    qDebug() << frame.step;
-    //cv::Mat bgr_frame = cv::Mat(cv::Size(1920, 1080), CV_8UC3);
-    //cv::Mat rgb_frame = cv::Mat(cv::Size(1920, 1080), CV_8UC3);
-    //cv::cvtColor(frame, bgr_frame, cv::COLOR_YUV2BGR_UYVY);
+    cv::Mat frame = cv::Mat(cv::Size(1920, 1080), CV_8UC2, buffers_[buf.index]);
+    //qDebug() << frame.step;
     cv::cvtColor(frame, frame, cv::COLOR_YUV2RGB_UYVY);
-    qDebug() << frame.step;
-    //cv::cvtColor(bgr_frame, rgb_frame, cv::COLOR_BGR2RGB);
+    //qDebug() << frame.step;
 
 #endif
 
     QImage img = QImage(frame.data, frame.cols, frame.rows, QImage::Format_RGB888);
-    //QImage img = QImage(rgb_frame.data, rgb_frame.cols, rgb_frame.rows, rgb_frame.step, QImage::Format_RGB888);
-
     img = img.scaled(ui_viewer->CAMERA->size(), Qt::KeepAspectRatio);
     //QPixmap *pix = new QPixmap();
     //*pix = QPixmap::fromImage(img);
