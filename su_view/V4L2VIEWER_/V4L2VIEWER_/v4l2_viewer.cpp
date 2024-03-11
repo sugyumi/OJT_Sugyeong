@@ -5,7 +5,7 @@
 #define DEVNAME "/dev/video0"
 #define CAMERA_WIDTH    1920
 #define CAMERA_HEIGHT   1080
-#define NBUF            3
+#define NBUF            1
 //#define OPT
 
 V4L2_viewer::V4L2_viewer(QWidget *parent)
@@ -43,7 +43,6 @@ void V4L2_viewer::on_START_STOP_clicked()
         /* start */
         stop_flag = true;
         ui_viewer->START_STOP->setText("STOP");
-        //loop(buffers);
         timer->start(33);
     }
     else
@@ -91,12 +90,17 @@ unsigned char* V4L2_viewer::beforeLOOP()
     CLEAR(fmt);
 
     fmt.type 				= V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
-    fmt.fmt.pix.width 		= CAMERA_WIDTH;
-    fmt.fmt.pix.height 		= CAMERA_HEIGHT;
+
+    if (ioctl(fd, VIDIOC_G_FMT, &fmt) == -1)
+    {
+        std::cout << "Failed to get camera format" << std::endl;
+    }
+
+    //fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
+    //fmt.fmt.pix.width 		= CAMERA_WIDTH;
+    //fmt.fmt.pix.height 		= CAMERA_HEIGHT;
     #ifdef OPT
     fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED;
-    #else
     fmt.fmt.pix.field       = V4L2_FIELD_NONE;
     #endif
 
@@ -124,10 +128,13 @@ unsigned char* V4L2_viewer::beforeLOOP()
         return 0;
     }
     printf("Success to request buffers\n");
+    qDebug() << "req.count : " << req.count;
+    qDebug() << "NBUF" << NBUF;
 
 
     /* Create buffer set */
     unsigned char* buffers[req.count];
+    //qDebug() << req.count;
 
 
     /*                  QUERYBUFS                    */
@@ -151,7 +158,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
 
 
         /* mmap */
-        buffers[buffers_idx] = (u_int8_t*)mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, buf.m.offset);
+        buffers[buffers_idx] = (u_int8_t*)mmap(nullptr, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, buf.m.offset);
 
         printf("mmap offset %d\n", buf.m.offset);
 
@@ -160,10 +167,19 @@ unsigned char* V4L2_viewer::beforeLOOP()
             std::cout << buffers[buffers_idx] << "\n";
         }
         printf("Success to mmap buffer %d\n", buffers_idx);
+
+        /* QBUF */
+        if (ioctl(fd, VIDIOC_QBUF, &buf) == -1)
+        {
+            qDebug() << "***** Cannot QUE Buffers *****";
+            QMessageBox::warning(this, "Warning", "Can not QUE BUF_1");
+            return 0;
+        }
     }
 
 
     /* QBUF */
+    /*
     for (unsigned int i=0; i<req.count; ++i)
     {
         struct v4l2_buffer buf;
@@ -179,7 +195,7 @@ unsigned char* V4L2_viewer::beforeLOOP()
             QMessageBox::warning(this, "Warning", "Can not QUE BUF_1");
             return 0;
         }
-    }
+    }*/
 
 
     /* STREAM ON */
@@ -210,13 +226,13 @@ unsigned char* V4L2_viewer::beforeLOOP()
 
 void V4L2_viewer::loop()
 {
-    qDebug() << "==========LOOPSTART===========";
+    //qDebug() << "==========LOOP START===========";
     struct v4l2_buffer buf;
     CLEAR(buf);
 
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_MMAP;
-    buf.index = 0;
+    //buf.index = 0;
     /* DQBUF */
     if (ioctl(fd, VIDIOC_DQBUF, &buf) == -1)
     {
@@ -224,31 +240,37 @@ void V4L2_viewer::loop()
         exit(1);
     }
     //printf("%s get buf index %d \n", DEVNAME, buf.index);
+    //qDebug() << buf.index;
 
-#if 1  /* use opencv */
-    //CvMat frame = cvMat(600, 800, CV_8UC1, &buffers[buf.index]);
-    //CvMat frame = cvMat(600, 800, CV_8UC1);
-    //frame.data = buffers[buf.index];
-    //CvMat temp;
-   // cvCvtColor(frame, temp, cv::COLOR_BGR2RGB);
-
+    /* use opencv */
+#if 0
     cv::Mat frame = cv::Mat(cv::Size(800, 600), CV_8UC2, &buffers[buf.index]);
     cv::Mat bgr_frame = cv::Mat(cv::Size(800, 600), CV_8UC3);
     cv::Mat rgb_frame = cv::Mat(cv::Size(800, 600), CV_8UC3);
     cv::cvtColor(frame, bgr_frame, cv::COLOR_YUV2RGB_UYVY);
     cv::cvtColor(bgr_frame, rgb_frame, cv::COLOR_BGR2RGB);
-
-
-    //CvMat cvmat2 = cvMat(cvSize(800, 600), CV_8UC2, &buffers[buf.index]);
-    //CvMat temp;
-    //cv::cvtColor(frame.data, temp, cv::COLOR_RGB2YUV);
-
-    QImage img = QImage((const uchar*)rgb_frame.data, rgb_frame.cols, rgb_frame.rows, rgb_frame.step, QImage::Format_RGB888);
-    QPixmap *pix = new QPixmap();
-    *pix = QPixmap::fromImage(img.rgbSwapped(), Qt::AutoColor);
-    ui_viewer->CAMERA->setPixmap(*pix);
+#else
+    cv::Mat frame = cv::Mat(cv::Size(1920, 1080), CV_8UC2, &buffers[buf.index]);
+    qDebug() << frame.step;
+    //cv::Mat bgr_frame = cv::Mat(cv::Size(1920, 1080), CV_8UC3);
+    //cv::Mat rgb_frame = cv::Mat(cv::Size(1920, 1080), CV_8UC3);
+    //cv::cvtColor(frame, bgr_frame, cv::COLOR_YUV2BGR_UYVY);
+    cv::cvtColor(frame, frame, cv::COLOR_YUV2RGB_UYVY);
+    qDebug() << frame.step;
+    //cv::cvtColor(bgr_frame, rgb_frame, cv::COLOR_BGR2RGB);
 
 #endif
+
+    QImage img = QImage(frame.data, frame.cols, frame.rows, QImage::Format_RGB888);
+    //QImage img = QImage(rgb_frame.data, rgb_frame.cols, rgb_frame.rows, rgb_frame.step, QImage::Format_RGB888);
+
+    img = img.scaled(ui_viewer->CAMERA->size(), Qt::KeepAspectRatio);
+    //QPixmap *pix = new QPixmap();
+    //*pix = QPixmap::fromImage(img);
+    ui_viewer->CAMERA->setPixmap(QPixmap::fromImage(img));
+    //ui_viewer->CAMERA->setPixmap(*pix);
+
+
 #if 0 /* not use opencv */
     QImage *frame = new QImage(&buffers[buf.index], 800, 600, QImage::Format_RGB888);
     QPixmap *pix = new QPixmap();
@@ -265,6 +287,6 @@ void V4L2_viewer::loop()
     }
     //printf("%s set buf index %d \n", DEVNAME, buf.index);
 
-     qDebug() << "==========LOOPEND===========";
+     //qDebug() << "==========LOOP END===========";
 }
 
